@@ -1,0 +1,21 @@
+scrapy==2.11.2
+feedparser==6.0.11
+newspaper3k==0.2.8
+beautifulsoup4==4.12.3
+lxml==5.2.2
+
+# DB
+sqlalchemy==2.0.30
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# 분류 / 중복 제거
+scikit-learn==1.5.0
+kiwipiepy==0.18.0
+datasketch==1.6.4
+
+# HTTP
+httpx==0.27.0
+
+# 유틸
+python-dotenv==1.0.1
