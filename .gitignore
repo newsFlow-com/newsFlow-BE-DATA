@@ -1,0 +1,23 @@
+# 환경 변수 (절대 커밋 금지)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+
+# 가상환경
+.venv/
+venv/
+
+# Scrapy
+.scrapy/
+
+# Airflow 로그
+logs/
+
+# IntelliJ
+.idea/
+*.iml
+
+# OS
+.DS_Store
