@@ -1,0 +1,497 @@
+"""initial schema — create all 28 tables
+
+Revision ID: 0001
+Revises:
+Create Date: 2025-05-18
+"""
+from __future__ import annotations
+
+import uuid
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+revision: str = "0001"
+down_revision: str | None = None
+branch_labels: str | None = None
+depends_on: str | None = None
+
+
+def upgrade() -> None:
+
+    # ── 1. users ──────────────────────────────────────────────────
+    op.create_table(
+        "users",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("email", sa.String(255), nullable=False, unique=True),
+        sa.Column("password_hash", sa.String(255), nullable=True),
+        sa.Column("nickname", sa.String(50), nullable=True),
+        sa.Column("profile_image_url", sa.Text, nullable=True),
+        sa.Column("role", sa.String(20), nullable=False, server_default="user"),
+        sa.Column("status", sa.String(20), nullable=False, server_default="active"),
+        sa.Column("email_verified", sa.Boolean, nullable=False, server_default="false"),
+        sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_users_email", "users", ["email"], unique=True)
+    op.create_index("ix_users_role_status", "users", ["role", "status"])
+
+    # ── 2. social_accounts ────────────────────────────────────────
+    op.create_table(
+        "social_accounts",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("provider", sa.String(30), nullable=False),
+        sa.Column("provider_uid", sa.String(255), nullable=False),
+        sa.Column("access_token", sa.Text, nullable=True),
+        sa.Column("refresh_token", sa.Text, nullable=True),
+        sa.Column("token_expires_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_social_provider_uid", "social_accounts", ["provider", "provider_uid"], unique=True)
+
+    # ── 3. refresh_tokens ─────────────────────────────────────────
+    op.create_table(
+        "refresh_tokens",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("token_hash", sa.String(512), nullable=False, unique=True),
+        sa.Column("gate", sa.String(10), nullable=False, server_default="user"),
+        sa.Column("is_revoked", sa.Boolean, nullable=False, server_default="false"),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_refresh_token_hash", "refresh_tokens", ["token_hash"], unique=True)
+    op.create_index("ix_refresh_user_gate", "refresh_tokens", ["user_id", "gate"])
+
+    # ── 4. sources ────────────────────────────────────────────────
+    op.create_table(
+        "sources",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("name", sa.String(100), nullable=False),
+        sa.Column("domain", sa.String(255), nullable=False, unique=True),
+        sa.Column("feed_url", sa.Text, nullable=True),
+        sa.Column("feed_type", sa.String(20), nullable=False),
+        sa.Column("country_code", sa.String(10), nullable=True),
+        sa.Column("language_code", sa.String(10), nullable=True),
+        sa.Column("tier", sa.String(20), nullable=False, server_default="domestic"),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
+        sa.Column("last_fetched_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_sources_domain", "sources", ["domain"], unique=True)
+    op.create_index("ix_sources_active_tier", "sources", ["is_active", "tier"])
+
+    # ── 5. articles ───────────────────────────────────────────────
+    op.create_table(
+        "articles",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("source_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("sources.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("original_url", sa.Text, nullable=False, unique=True),
+        sa.Column("title", sa.String(500), nullable=False),
+        sa.Column("summary", sa.Text, nullable=True),
+        sa.Column("content", sa.Text, nullable=True),
+        sa.Column("thumbnail_url", sa.Text, nullable=True),
+        sa.Column("author", sa.String(100), nullable=True),
+        sa.Column("language_code", sa.String(10), nullable=False, server_default="ko"),
+        sa.Column("status", sa.String(20), nullable=False, server_default="active"),
+        sa.Column("view_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("collected_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_articles_url", "articles", ["original_url"], unique=True)
+    op.create_index("ix_articles_published", "articles", ["published_at"])
+    op.create_index("ix_articles_source_published", "articles", ["source_id", "published_at"])
+    op.create_index("ix_articles_status", "articles", ["status"])
+    op.create_index("ix_articles_language", "articles", ["language_code"])
+
+    # ── 6. categories ─────────────────────────────────────────────
+    op.create_table(
+        "categories",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("parent_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("categories.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("name", sa.String(50), nullable=False),
+        sa.Column("slug", sa.String(80), nullable=False, unique=True),
+        sa.Column("icon_url", sa.Text, nullable=True),
+        sa.Column("display_order", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_categories_slug", "categories", ["slug"], unique=True)
+    op.create_index("ix_categories_parent", "categories", ["parent_id"])
+    op.create_index("ix_categories_active", "categories", ["is_active"])
+
+    # ── 7. article_categories ─────────────────────────────────────
+    op.create_table(
+        "article_categories",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("article_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("category_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("categories.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("classified_by", sa.String(20), nullable=False, server_default="rule"),
+        sa.Column("confidence_score", sa.Float, nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_ac_article_category", "article_categories", ["article_id", "category_id"], unique=True)
+    op.create_index("ix_ac_category", "article_categories", ["category_id"])
+
+    # ── 8. keywords ───────────────────────────────────────────────
+    op.create_table(
+        "keywords",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("word", sa.String(100), nullable=False, unique=True),
+        sa.Column("word_normalized", sa.String(100), nullable=True),
+        sa.Column("language_code", sa.String(10), nullable=False, server_default="ko"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_keywords_word", "keywords", ["word"], unique=True)
+    op.create_index("ix_keywords_normalized", "keywords", ["word_normalized"])
+    op.create_index("ix_keywords_language", "keywords", ["language_code"])
+
+    # ── 9. article_keywords ───────────────────────────────────────
+    op.create_table(
+        "article_keywords",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("article_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("keyword_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("relevance_score", sa.Float, nullable=True),
+        sa.Column("extracted_by", sa.String(20), nullable=False, server_default="tfidf"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_ak_article_keyword", "article_keywords", ["article_id", "keyword_id"], unique=True)
+    op.create_index("ix_ak_keyword", "article_keywords", ["keyword_id"])
+    op.create_index("ix_ak_relevance", "article_keywords", ["relevance_score"])
+
+    # ── 10. trending_keywords ─────────────────────────────────────
+    op.create_table(
+        "trending_keywords",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("keyword_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("keywords.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("trend_date", sa.Date, nullable=False),
+        sa.Column("trend_type", sa.String(20), nullable=False, server_default="daily"),
+        sa.Column("rank", sa.Integer, nullable=False),
+        sa.Column("search_volume_index", sa.Float, nullable=True),
+        sa.Column("source", sa.String(20), nullable=False, server_default="pytrends"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_tk_date_rank", "trending_keywords", ["trend_date", "rank"])
+    op.create_index("ix_tk_keyword_date", "trending_keywords", ["keyword_id", "trend_date"])
+    op.create_index("ix_tk_type", "trending_keywords", ["trend_type"])
+
+    # ── 11. stocks ────────────────────────────────────────────────
+    op.create_table(
+        "stocks",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("ticker", sa.String(20), nullable=False, unique=True),
+        sa.Column("name", sa.String(100), nullable=False),
+        sa.Column("market", sa.String(20), nullable=False),
+        sa.Column("country_code", sa.String(10), nullable=False, server_default="KR"),
+        sa.Column("sector", sa.String(100), nullable=True),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_stocks_ticker", "stocks", ["ticker"], unique=True)
+    op.create_index("ix_stocks_market_active", "stocks", ["market", "is_active"])
+    op.create_index("ix_stocks_sector", "stocks", ["sector"])
+
+    # ── 12. article_stocks ────────────────────────────────────────
+    op.create_table(
+        "article_stocks",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("article_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("stock_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("mention_score", sa.Float, nullable=True),
+        sa.Column("linked_by", sa.String(20), nullable=False, server_default="rule"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_as_article_stock", "article_stocks", ["article_id", "stock_id"], unique=True)
+    op.create_index("ix_as_stock", "article_stocks", ["stock_id"])
+
+    # ── 13. stock_prices ──────────────────────────────────────────
+    op.create_table(
+        "stock_prices",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("stock_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("stocks.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("price_date", sa.Date, nullable=False),
+        sa.Column("open_price", sa.Numeric(18, 4), nullable=True),
+        sa.Column("close_price", sa.Numeric(18, 4), nullable=True),
+        sa.Column("high_price", sa.Numeric(18, 4), nullable=True),
+        sa.Column("low_price", sa.Numeric(18, 4), nullable=True),
+        sa.Column("volume", sa.BigInteger, nullable=True),
+        sa.Column("change_rate", sa.Numeric(8, 4), nullable=True),
+        sa.Column("fetched_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_sp_stock_date", "stock_prices", ["stock_id", "price_date"], unique=True)
+    op.create_index("ix_sp_date", "stock_prices", ["price_date"])
+
+    # ── 14. bookmarks ─────────────────────────────────────────────
+    op.create_table(
+        "bookmarks",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("article_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_bm_user_article", "bookmarks", ["user_id", "article_id"], unique=True)
+    op.create_index("ix_bm_user", "bookmarks", ["user_id"])
+
+    # ── 15. user_categories ───────────────────────────────────────
+    op.create_table(
+        "user_categories",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("category_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("categories.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("preference_weight", sa.Integer, nullable=False, server_default="5"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_uc_user_category", "user_categories", ["user_id", "category_id"], unique=True)
+    op.create_index("ix_uc_user", "user_categories", ["user_id"])
+
+    # ── 16. share_logs ────────────────────────────────────────────
+    op.create_table(
+        "share_logs",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("target_type", sa.String(20), nullable=False),
+        sa.Column("target_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("channel", sa.String(30), nullable=False),
+        sa.Column("ip_address", sa.String(50), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_sl_user", "share_logs", ["user_id"])
+    op.create_index("ix_sl_target", "share_logs", ["target_type", "target_id"])
+    op.create_index("ix_sl_channel", "share_logs", ["channel"])
+    op.create_index("ix_sl_created", "share_logs", ["created_at"])
+
+    # ── 17. daily_article_stats ───────────────────────────────────
+    op.create_table(
+        "daily_article_stats",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("article_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("stat_date", sa.Date, nullable=False),
+        sa.Column("view_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("bookmark_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("share_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("trending_score", sa.Float, nullable=False, server_default="0"),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_das_article_date", "daily_article_stats", ["article_id", "stat_date"], unique=True)
+    op.create_index("ix_das_date", "daily_article_stats", ["stat_date"])
+    op.create_index("ix_das_trending", "daily_article_stats", ["trending_score"])
+
+    # ── 18. daily_user_stats (관리자 관찰) ─────────────────────────
+    op.create_table(
+        "daily_user_stats",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("stat_date", sa.Date, nullable=False, unique=True),
+        sa.Column("total_users", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("active_users", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("new_users", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("suspended_users", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("deleted_users", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("kakao_signup_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("google_signup_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("churn_rate", sa.Float, nullable=True),
+        sa.Column("mau", sa.Integer, nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_dus_date", "daily_user_stats", ["stat_date"], unique=True)
+
+    # ── 19. pipeline_stats (관리자 관찰) ───────────────────────────
+    op.create_table(
+        "pipeline_stats",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("dag_id", sa.String(100), nullable=False),
+        sa.Column("run_id", sa.String(255), nullable=True),
+        sa.Column("status", sa.String(20), nullable=False),
+        sa.Column("collected_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("duplicate_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("error_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("source_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("duration_seconds", sa.Float, nullable=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_ps_dag_started", "pipeline_stats", ["dag_id", "started_at"])
+    op.create_index("ix_ps_status", "pipeline_stats", ["status"])
+    op.create_index("ix_ps_started", "pipeline_stats", ["started_at"])
+
+    # ── 20. api_request_logs (관리자 관찰) ─────────────────────────
+    op.create_table(
+        "api_request_logs",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("gate", sa.String(10), nullable=False),
+        sa.Column("method", sa.String(10), nullable=False),
+        sa.Column("endpoint", sa.String(255), nullable=False),
+        sa.Column("status_code", sa.Integer, nullable=False),
+        sa.Column("response_time_ms", sa.Integer, nullable=False),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("ip_address", sa.String(50), nullable=True),
+        sa.Column("user_agent", sa.String(500), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_arl_endpoint_created", "api_request_logs", ["endpoint", "created_at"])
+    op.create_index("ix_arl_gate", "api_request_logs", ["gate"])
+    op.create_index("ix_arl_status_code", "api_request_logs", ["status_code"])
+    op.create_index("ix_arl_response_time", "api_request_logs", ["response_time_ms"])
+    op.create_index("ix_arl_created", "api_request_logs", ["created_at"])
+
+    # ── 21. admin_logs ────────────────────────────────────────────
+    op.create_table(
+        "admin_logs",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("admin_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("action", sa.String(50), nullable=False),
+        sa.Column("target_type", sa.String(50), nullable=False),
+        sa.Column("target_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("before_value", postgresql.JSONB, nullable=True),
+        sa.Column("after_value", postgresql.JSONB, nullable=True),
+        sa.Column("ip_address", sa.String(50), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_al_admin_created", "admin_logs", ["admin_id", "created_at"])
+    op.create_index("ix_al_target", "admin_logs", ["target_type", "target_id"])
+    op.create_index("ix_al_action", "admin_logs", ["action"])
+    op.create_index("ix_al_created", "admin_logs", ["created_at"])
+
+    # ── 22. collect_logs ──────────────────────────────────────────
+    op.create_table(
+        "collect_logs",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("source_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("sources.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("status", sa.String(20), nullable=False),
+        sa.Column("collected_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("duplicate_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("error_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("error_message", sa.Text, nullable=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_cl_source_started", "collect_logs", ["source_id", "started_at"])
+    op.create_index("ix_cl_status", "collect_logs", ["status"])
+    op.create_index("ix_cl_started", "collect_logs", ["started_at"])
+
+    # ── 23. content_quality_logs (관리자 관찰) ─────────────────────
+    op.create_table(
+        "content_quality_logs",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("article_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("check_type", sa.String(30), nullable=False),
+        sa.Column("is_correct", sa.Boolean, nullable=True),
+        sa.Column("original_value", postgresql.JSONB, nullable=True),
+        sa.Column("correction", postgresql.JSONB, nullable=True),
+        sa.Column("checked_by", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_cql_article", "content_quality_logs", ["article_id"])
+    op.create_index("ix_cql_check_type", "content_quality_logs", ["check_type"])
+    op.create_index("ix_cql_is_correct", "content_quality_logs", ["is_correct"])
+    op.create_index("ix_cql_created", "content_quality_logs", ["created_at"])
+
+    # ── 24. article_reports ───────────────────────────────────────
+    op.create_table(
+        "article_reports",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("article_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("articles.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("reporter_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("reason", sa.String(30), nullable=False),
+        sa.Column("detail", sa.Text, nullable=True),
+        sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
+        sa.Column("resolved_by", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("resolution", sa.Text, nullable=True),
+        sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_ar_article", "article_reports", ["article_id"])
+    op.create_index("ix_ar_status", "article_reports", ["status"])
+    op.create_index("ix_ar_reporter", "article_reports", ["reporter_id"])
+    op.create_index("ix_ar_created", "article_reports", ["created_at"])
+
+    # ── 25. notices ───────────────────────────────────────────────
+    op.create_table(
+        "notices",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("title", sa.String(255), nullable=False),
+        sa.Column("content", sa.Text, nullable=False),
+        sa.Column("author_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("is_pinned", sa.Boolean, nullable=False, server_default="false"),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
+        sa.Column("target_gate", sa.String(10), nullable=False, server_default="user"),
+        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("expired_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_notices_published", "notices", ["published_at"])
+    op.create_index("ix_notices_target", "notices", ["target_gate"])
+    op.create_index("ix_notices_pinned", "notices", ["is_pinned"])
+
+    # ── 26. banners ───────────────────────────────────────────────
+    op.create_table(
+        "banners",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sa.Column("title", sa.String(100), nullable=False),
+        sa.Column("image_url", sa.Text, nullable=False),
+        sa.Column("link_url", sa.Text, nullable=True),
+        sa.Column("position", sa.String(30), nullable=False),
+        sa.Column("display_order", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("is_active", sa.Boolean, nullable=False, server_default="true"),
+        sa.Column("start_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("end_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("click_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("impression_count", sa.Integer, nullable=False, server_default="0"),
+        sa.Column("created_by", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_banners_position_active", "banners", ["position", "is_active"])
+    op.create_index("ix_banners_start_end", "banners", ["start_at", "end_at"])
+
+
+def downgrade() -> None:
+    """전체 롤백 — 역순으로 drop."""
+    tables = [
+        "banners", "notices", "article_reports",
+        "content_quality_logs", "collect_logs", "admin_logs",
+        "api_request_logs", "pipeline_stats", "daily_user_stats",
+        "daily_article_stats", "share_logs", "user_categories", "bookmarks",
+        "stock_prices", "article_stocks", "stocks",
+        "trending_keywords", "article_keywords", "keywords",
+        "article_categories", "categories",
+        "articles", "sources",
+        "refresh_tokens", "social_accounts", "users",
+    ]
+    for table in tables:
+        op.drop_table(table)
