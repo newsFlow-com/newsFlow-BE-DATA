@@ -1,41 +1,29 @@
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from datetime import datetime, timedelta
+# ── 크롤링 / 수집 ────────────────────────────────────────────────
+scrapy==2.11.2
+feedparser==6.0.11
+newspaper4k==0.9.3.1        # newspaper3k 대체 (Python 3.11+ 호환)
+beautifulsoup4==4.12.3
+lxml==5.2.2
 
-default_args = {
-    "owner": "newsflow",
-    "retries": 1,
-    "retry_delay": timedelta(minutes=5),
-}
+# ── 뉴스 API 클라이언트 ───────────────────────────────────────────
+newsapi-python==0.2.7       # NewsAPI.org 공식 클라이언트
+pytrends==4.9.2             # Google Trends 비공식 클라이언트
 
+# ── DB ───────────────────────────────────────────────────────────
+sqlalchemy==2.0.30
+psycopg2-binary==2.9.9
+alembic==1.13.1
 
-def collect_rss():
-    from crawlers.rss.rss_collector import collect_all_rss
-    articles = collect_all_rss()
-    print(f"RSS 수집 완료: {len(articles)}건")
+# ── 데이터 처리 ───────────────────────────────────────────────────
+pandas==2.2.2               # 집계 파이프라인 데이터 처리
 
+# ── 분류 / 중복 제거 ──────────────────────────────────────────────
+scikit-learn==1.5.0
+kiwipiepy==0.18.0           # 한국어 형태소 분석
+datasketch==1.6.4           # LSH MinHash 기반 중복 감지
 
-def collect_news_api():
-    print("뉴스 API 수집 시작 (추후 구현)")
+# ── HTTP ─────────────────────────────────────────────────────────
+httpx==0.27.0
 
-
-with DAG(
-        dag_id="hourly_collect",
-        default_args=default_args,
-        description="시간별 뉴스 기사 수집",
-        schedule_interval="@hourly",
-        start_date=datetime(2025, 1, 1),
-        catchup=False,
-) as dag:
-
-    task_rss = PythonOperator(
-        task_id="collect_rss",
-        python_callable=collect_rss,
-    )
-
-    task_api = PythonOperator(
-        task_id="collect_news_api",
-        python_callable=collect_news_api,
-    )
-
-    task_rss >> task_api
+# ── 유틸 ─────────────────────────────────────────────────────────
+python-dotenv==1.0.1

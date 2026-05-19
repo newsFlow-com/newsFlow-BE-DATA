@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # ── NewsFlow 전용 PostgreSQL ─────────────────────────────────────
   postgres:
     image: postgres:16
     container_name: newsflow-data-postgres
@@ -14,36 +15,98 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - newsflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newsflow -d newsflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ── Airflow 전용 PostgreSQL (메타데이터 분리) ─────────────────────
+  airflow-postgres:
+    image: postgres:16
+    container_name: newsflow-airflow-postgres
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow1234
+    ports:
+      - "5434:5432"
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    networks:
+      - newsflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (조회수 캐시 / 인기 기사 랭킹) ─────────────────────────
+  redis:
+    image: redis:7.2
+    container_name: newsflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - newsflow-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Airflow ──────────────────────────────────────────────────────
   airflow:
     image: apache/airflow:2.9.1
     container_name: newsflow-airflow
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://newsflow:newsflow1234@postgres:5432/newsflow
+      # Airflow 자체 메타데이터 → airflow-postgres
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow1234@airflow-postgres:5432/airflow
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__WEBSERVER__SECRET_KEY: newsflow-airflow-secret
+      # DAG에서 app.models 등 프로젝트 패키지를 임포트할 수 있도록 경로 추가
+      PYTHONPATH: /opt/newsflow
+      # DAG에서 NewsFlow DB 접근 시 사용할 환경변수
+      DATABASE_URL: postgresql+psycopg2://newsflow:newsflow1234@postgres:5432/newsflow
     ports:
       - "8082:8080"
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - airflow_plugins:/opt/airflow/plugins
+      # 프로젝트 루트 마운트 → alembic, app/models, crawlers, pipelines 접근 가능
+      - .:/opt/newsflow
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      airflow-postgres:
+        condition: service_healthy
     networks:
       - newsflow-network
     command: >
-      bash -c "airflow db migrate &&
-               airflow users create --username admin --password admin
-               --firstname NewsFlow --lastname Admin
-               --role Admin --email admin@newsflow.com &&
-               airflow webserver & airflow scheduler"
+      bash -c "
+        pip install -r /opt/newsflow/requirements.txt -q &&
+        airflow db migrate &&
+        airflow users create
+          --username admin
+          --password admin
+          --firstname NewsFlow
+          --lastname Admin
+          --role Admin
+          --email admin@newsflow.com || true &&
+        cd /opt/newsflow && alembic upgrade head &&
+        airflow webserver & airflow scheduler
+      "
 
 volumes:
   postgres_data:
+  airflow_postgres_data:
   airflow_plugins:
+  redis_data:
 
 networks:
   newsflow-network:
