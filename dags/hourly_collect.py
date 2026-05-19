@@ -1,29 +1,90 @@
-# ── 크롤링 / 수집 ────────────────────────────────────────────────
-scrapy==2.11.2
-feedparser==6.0.11
-newspaper4k==0.9.3.1        # newspaper3k 대체 (Python 3.11+ 호환)
-beautifulsoup4==4.12.3
-lxml==5.2.2
+import os
+import sys
+import logging
 
-# ── 뉴스 API 클라이언트 ───────────────────────────────────────────
-newsapi-python==0.2.7       # NewsAPI.org 공식 클라이언트
-pytrends==4.9.2             # Google Trends 비공식 클라이언트
+# Airflow 컨테이너 내 PYTHONPATH 보정
+_project_root = os.environ.get("PYTHONPATH", os.path.join(os.path.dirname(__file__), ".."))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
-# ── DB ───────────────────────────────────────────────────────────
-sqlalchemy==2.0.30
-psycopg2-binary==2.9.9
-alembic==1.13.1
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+from datetime import datetime, timedelta
 
-# ── 데이터 처리 ───────────────────────────────────────────────────
-pandas==2.2.2               # 집계 파이프라인 데이터 처리
+logger = logging.getLogger(__name__)
 
-# ── 분류 / 중복 제거 ──────────────────────────────────────────────
-scikit-learn==1.5.0
-kiwipiepy==0.18.0           # 한국어 형태소 분석
-datasketch==1.6.4           # LSH MinHash 기반 중복 감지
+default_args = {
+    "owner": "newsflow",
+    "retries": 1,
+    "retry_delay": timedelta(minutes=5),
+}
 
-# ── HTTP ─────────────────────────────────────────────────────────
-httpx==0.27.0
 
-# ── 유틸 ─────────────────────────────────────────────────────────
-python-dotenv==1.0.1
+def collect_rss(**context):
+    """RSS 수집 → 전처리 → 중복제거 → 분류 → XCom push."""
+    from crawlers.rss.rss_collector import collect_all_rss
+    from pipelines.preprocessor import preprocess_all
+    from pipelines.deduplicator import deduplicate
+    from pipelines.classifier import classify_all
+
+    # 1. 수집
+    raw = collect_all_rss()
+    logger.info(f"[RSS] 수집: {len(raw)}건")
+
+    # 2. 전처리
+    cleaned = preprocess_all(raw)
+
+    # 3. 중복 제거 (DB URL 조회는 추후 구현 — 현재는 배치 내 중복만 제거)
+    deduped = deduplicate(cleaned, existing_urls=None)
+
+    # 4. 분류
+    classified = classify_all(deduped)
+    logger.info(f"[RSS] 최종 적재 대상: {len(classified)}건")
+
+    # 5. XCom 에 결과 건수 push (모니터링용)
+    context["ti"].xcom_push(key="rss_count", value=len(classified))
+
+    # TODO: DB 적재 (db writer 구현 후 연결)
+    return len(classified)
+
+
+def collect_news_api(**context):
+    """NewsAPI 수집 → 전처리 → 중복제거 → 분류."""
+    from crawlers.news_api.news_api_collector import collect_news_api as fetch_api
+    from pipelines.preprocessor import preprocess_all
+    from pipelines.deduplicator import deduplicate
+    from pipelines.classifier import classify_all
+
+    raw = fetch_api()
+    logger.info(f"[NewsAPI] 수집: {len(raw)}건")
+
+    cleaned = preprocess_all(raw)
+    deduped = deduplicate(cleaned, existing_urls=None)
+    classified = classify_all(deduped)
+
+    context["ti"].xcom_push(key="newsapi_count", value=len(classified))
+
+    # TODO: DB 적재
+    return len(classified)
+
+
+with DAG(
+        dag_id="hourly_collect",
+        default_args=default_args,
+        description="시간별 뉴스 기사 수집 → 전처리 → 분류",
+        schedule_interval="@hourly",
+        start_date=datetime(2025, 1, 1),
+        catchup=False,
+) as dag:
+
+    task_rss = PythonOperator(
+        task_id="collect_rss",
+        python_callable=collect_rss,
+    )
+
+    task_api = PythonOperator(
+        task_id="collect_news_api",
+        python_callable=collect_news_api,
+    )
+
+    task_rss >> task_api
