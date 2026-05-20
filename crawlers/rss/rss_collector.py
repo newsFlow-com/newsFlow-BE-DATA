@@ -22,31 +22,50 @@ logger = logging.getLogger(__name__)
 # (name, domain, feed_url, language_code)
 RSS_SOURCES: list[tuple[str, str, str, str]] = [
 
-    # ── 공영방송 ─────────────────────────────────────────────────────
-    ("KBS",     "news.kbs.co.kr",   "https://news.kbs.co.kr/rss/rss.do?source=1",    "ko"),
-    ("MBC",     "imnews.imbc.com",  "https://imnews.imbc.com/rss/news/news_00.xml",  "ko"),
-    ("SBS",     "news.sbs.co.kr",   "https://news.sbs.co.kr/news/rss/rssFeed.do?prim_div=1", "ko"),
+    # ── SBS 섹션별 ────────────────────────────────────────────────
+    ("SBS-정치",   "news.sbs.co.kr", "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=01&plink=RSSREADER", "ko"),
+    ("SBS-경제",   "news.sbs.co.kr", "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=02&plink=RSSREADER", "ko"),
+    ("SBS-사회",   "news.sbs.co.kr", "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=03&plink=RSSREADER", "ko"),
+    ("SBS-국제",   "news.sbs.co.kr", "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=07&plink=RSSREADER", "ko"),
+    ("SBS-문화",   "news.sbs.co.kr", "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=08&plink=RSSREADER", "ko"),
+    ("SBS-스포츠", "news.sbs.co.kr", "https://news.sbs.co.kr/news/SectionRssFeed.do?sectionId=09&plink=RSSREADER", "ko"),
 
-    # ── 종합일간지 ───────────────────────────────────────────────────
-    ("조선일보",  "chosun.com",       "https://www.chosun.com/arc/outboundfeeds/rss/", "ko"),
-    ("중앙일보",  "joongang.co.kr",   "https://rss.joins.com/joins_news_list.xml",     "ko"),
-    ("동아일보",  "donga.com",        "https://rss.donga.com/total.xml",               "ko"),
-    ("한겨레",   "hani.co.kr",       "https://www.hani.co.kr/rss/",                   "ko"),
-    ("경향신문",  "khan.co.kr",       "https://www.khan.co.kr/rss/rssdata/total_news.xml", "ko"),
+    # ── 동아일보 섹션별 ───────────────────────────────────────────
+    ("동아-정치",  "donga.com", "https://rss.donga.com/politics.xml",     "ko"),
+    ("동아-경제",  "donga.com", "https://rss.donga.com/economy.xml",      "ko"),
+    ("동아-사회",  "donga.com", "https://rss.donga.com/national.xml",     "ko"),
+    ("동아-국제",  "donga.com", "https://rss.donga.com/international.xml","ko"),
+    ("동아-과학",  "donga.com", "https://rss.donga.com/science.xml",      "ko"),
+    ("동아-문화",  "donga.com", "https://rss.donga.com/culture.xml",      "ko"),
 
-    # ── 경제지 ──────────────────────────────────────────────────────
-    ("한국경제",  "hankyung.com",     "https://www.hankyung.com/feed/all-news",        "ko"),
-    ("매일경제",  "mk.co.kr",        "https://www.mk.co.kr/rss/30100041/",            "ko"),
-    ("서울경제",  "sedaily.com",      "https://www.sedaily.com/RSS/S1",                "ko"),
+    # ── 경향신문 섹션별 ───────────────────────────────────────────
+    ("경향신문",  "khan.co.kr", "https://www.khan.co.kr/rss/rssdata/total_news.xml", "ko"),
 
-    # ── IT/기술 ──────────────────────────────────────────────────────
-    ("전자신문",  "etnews.com",       "https://www.etnews.com/etnews_rss.xml",         "ko"),
-    ("ZDNet Korea", "zdnet.co.kr",   "https://www.zdnet.co.kr/rss/feed/",             "ko"),
+    # ── 한겨레 전체 ───────────────────────────────────────────────
+    ("한겨레",     "hani.co.kr", "https://www.hani.co.kr/rss/", "ko"),
 
-    # ── 해외 (영문) ──────────────────────────────────────────────────
-    ("Reuters",  "reuters.com",      "https://feeds.reuters.com/reuters/topNews",      "en"),
-    ("BBC",      "bbc.com",          "https://feeds.bbci.co.uk/news/rss.xml",          "en"),
-    ("AP News",  "apnews.com",       "https://rsshub.app/apnews/topics/apf-topnews",   "en"),
+    # ── 한국경제 전체 ─────────────────────────────────────────────
+    ("한국경제",   "hankyung.com", "https://www.hankyung.com/feed/all-news", "ko"),
+
+    # ── 매일경제 섹션별 ───────────────────────────────────────────
+    ("매경-경제",  "mk.co.kr", "https://www.mk.co.kr/rss/30100041/", "ko"),
+    ("매경-정치",  "mk.co.kr", "https://www.mk.co.kr/rss/30200030/", "ko"),
+    ("매경-사회",  "mk.co.kr", "https://www.mk.co.kr/rss/50400012/", "ko"),
+    ("매경-국제",  "mk.co.kr", "https://www.mk.co.kr/rss/30300018/", "ko"),
+    ("매경-기업",  "mk.co.kr", "https://www.mk.co.kr/rss/50100032/", "ko"),
+    ("매경-증권",  "mk.co.kr", "https://www.mk.co.kr/rss/50200011/", "ko"),
+
+    # ── 연합뉴스 전체 ─────────────────────────────────────────────
+    ("연합뉴스",   "yna.co.kr", "https://www.yna.co.kr/rss/news.xml", "ko"),
+
+    # ── 노컷뉴스 섹션별 ───────────────────────────────────────────
+    ("노컷뉴스",  "nocutnews.co.kr", "https://rss.nocutnews.co.kr/nocutnews.xml", "ko"),
+
+    # ── 해외 (영문) ───────────────────────────────────────────────
+    ("BBC",           "bbc.com",       "https://feeds.bbci.co.uk/news/rss.xml",                "en"),
+    ("BBC-비즈니스",  "bbc.com",       "https://feeds.bbci.co.uk/news/business/rss.xml",       "en"),
+    ("BBC-기술",      "bbc.com",       "https://feeds.bbci.co.uk/news/technology/rss.xml",     "en"),
+    ("BBC-세계",      "bbc.com",       "https://feeds.bbci.co.uk/news/world/rss.xml",          "en"),
 ]
 
 
