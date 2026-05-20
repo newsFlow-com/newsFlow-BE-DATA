@@ -108,13 +108,7 @@ class ShareLog(UUIDMixin, Base):
     )
 
     user: Mapped[Optional["User"]] = relationship(back_populates="share_logs")
-    article: Mapped[Optional["Article"]] = relationship(
-        primaryjoin="and_(ShareLog.target_type=='article', "
-                    "foreign(ShareLog.target_id)==Article.id)",
-        viewonly=True,
-    )
 
 
 from .category import Category  # noqa: E402
-from .news import Article  # noqa: E402
 from .user import User  # noqa: E402

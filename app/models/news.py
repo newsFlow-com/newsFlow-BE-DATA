@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     BigInteger, DateTime, ForeignKey, Index,
     Integer, String, Text, func
 )
@@ -108,7 +109,6 @@ class Article(UUIDMixin, TimestampMixin, Base):
     bookmarks: Mapped[list["Bookmark"]] = relationship(
         back_populates="article", cascade="all, delete-orphan"
     )
-    share_logs: Mapped[list["ShareLog"]] = relationship(back_populates="article")
     reports: Mapped[list["ArticleReport"]] = relationship(
         back_populates="article", cascade="all, delete-orphan"
     )
@@ -120,7 +120,7 @@ class Article(UUIDMixin, TimestampMixin, Base):
 # 순환 참조 방지
 from sqlalchemy import Boolean  # noqa: E402 — Boolean은 Source에서도 필요
 
-from .activity import Bookmark, ShareLog  # noqa: E402
+from .activity import Bookmark  # noqa: E402
 from .admin import AdminLog, ArticleReport, CollectLog, ContentQualityLog  # noqa: E402
 from .category import ArticleCategory  # noqa: E402
 from .keyword import ArticleKeyword  # noqa: E402
