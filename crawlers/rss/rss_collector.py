@@ -2,8 +2,6 @@
 crawlers/rss/rss_collector.py
 국내·해외 언론사 RSS/Atom 피드 수집기.
 
-feedparser 로 피드를 파싱하고 RawArticle 구조로 정규화한다.
-언론사마다 다른 RSS 필드명·날짜 포맷을 이 레이어에서 흡수한다.
 """
 import logging
 from datetime import datetime, timezone
@@ -19,7 +17,6 @@ from crawlers.base_collector import BaseCollector, RawArticle
 logger = logging.getLogger(__name__)
 
 # ── 수집 대상 RSS 피드 정의 ──────────────────────────────────────────
-# (name, domain, feed_url, language_code)
 RSS_SOURCES: list[tuple[str, str, str, str]] = [
 
     # ── SBS 섹션별 ────────────────────────────────────────────────
@@ -218,12 +215,6 @@ def collect_all_rss(
     RSS_SOURCES 에 정의된 모든 소스를 순차 수집해 합산 반환.
     DAG 의 collect_rss() 태스크에서 호출하는 진입점.
 
-    Args:
-        sources: (name, domain, feed_url, language_code) 튜플 목록.
-                 기본값은 RSS_SOURCES 전체.
-
-    Returns:
-        전체 소스의 RawArticle 합산 리스트.
     """
     all_articles: list[RawArticle] = []
 
