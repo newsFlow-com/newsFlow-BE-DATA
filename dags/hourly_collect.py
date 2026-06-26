@@ -77,6 +77,30 @@ def collect_news_api(**context):
     return result.inserted
 
 
+def collect_naver_news(**context):
+    """네이버 뉴스 API 수집 → 전처리 → 중복제거 → 분류 → DB 적재."""
+    from crawlers.news_api.naver_news_collector import collect_naver_news as fetch_naver
+    from pipelines.preprocessor import preprocess_all
+    from pipelines.deduplicator import deduplicate
+    from pipelines.classifier import classify_all
+    from app.db.writer import write_articles, fetch_existing_urls
+
+    raw = fetch_naver()
+    logger.info(f"[NaverNews] 수집: {len(raw)}건")
+
+    cleaned = preprocess_all(raw)
+    existing_urls = fetch_existing_urls()
+    deduped = deduplicate(cleaned, existing_urls=existing_urls)
+    classified = classify_all(deduped)
+
+    result = write_articles(classified)
+    logger.info(f"[NaverNews] DB 적재 완료: {result}")
+
+    context["ti"].xcom_push(key="naver_inserted", value=result.inserted)
+    context["ti"].xcom_push(key="naver_skipped", value=result.skipped)
+    return result.inserted
+
+
 with DAG(
         dag_id="hourly_collect",
         default_args=default_args,
@@ -96,4 +120,10 @@ with DAG(
         python_callable=collect_news_api,
     )
 
-    task_rss >> task_api
+    task_naver = PythonOperator(
+        task_id="collect_naver_news",
+        python_callable=collect_naver_news,
+    )
+
+    # RSS → NewsAPI → 네이버 순차 실행 (DB 부하 분산)
+    task_rss >> task_api >> task_naver
