@@ -255,6 +255,7 @@ def _write_collect_log(
         duplicate: int,
         error: int,
         started_at: datetime,
+        error_message: Optional[str] = None,
 ) -> None:
     """소스별 수집 이력을 collect_logs 에 기록한다."""
     session.add(CollectLog(
@@ -264,6 +265,7 @@ def _write_collect_log(
         collected_count=collected,
         duplicate_count=duplicate,
         error_count=error,
+        error_message=error_message,
         started_at=started_at,
         ended_at=datetime.now(tz=timezone.utc),
     ))
@@ -318,7 +320,7 @@ def write_articles(classified_articles: list[ClassifiedArticle]) -> WriteResult:
 
                 if article_id is None:
                     result.skipped += 1
-                    source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0})
+                    source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0, "err_msg": None})
                     source_stats[source_id]["dup"] += 1
                     continue
 
@@ -329,17 +331,19 @@ def write_articles(classified_articles: list[ClassifiedArticle]) -> WriteResult:
                 _upsert_keywords(session, article_id, ca.keywords, ca.article["language_code"])
 
                 result.inserted += 1
-                source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0})
+                source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0, "err_msg": None})
                 source_stats[source_id]["inserted"] += 1
 
             except Exception as e:
                 result.errors += 1
+                err_str = str(e)
                 logger.error(
-                    f"[Writer] 적재 실패: {ca.article['original_url'][:60]} — {e}"
+                    f"[Writer] 적재 실패: {ca.article['original_url'][:60]} — {err_str}"
                 )
                 if source_id is not None:
-                    source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0})
+                    source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0, "err_msg": None})
                     source_stats[source_id]["err"] += 1
+                    source_stats[source_id]["err_msg"] = err_str[:500]
 
         # 5. CollectLog 기록
         for src_id, stats in source_stats.items():
@@ -349,6 +353,7 @@ def write_articles(classified_articles: list[ClassifiedArticle]) -> WriteResult:
                 collected=stats["inserted"],
                 duplicate=stats["dup"],
                 error=stats["err"],
+                error_message=stats["err_msg"],
                 started_at=started_at,
             )
 
