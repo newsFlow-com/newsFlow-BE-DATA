@@ -72,6 +72,7 @@ def _normalize_article(item: dict, category: str) -> Optional[RawArticle]:
     return RawArticle(
         source_domain=source_domain,
         source_name=source_name,
+        feed_url="https://newsapi.org/v2/top-headlines",
         original_url=url,
         title=title,
         summary=item.get("description"),

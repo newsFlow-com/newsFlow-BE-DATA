@@ -58,7 +58,7 @@ def _upsert_source(session: Session, article: ClassifiedArticle) -> uuid.UUID:
             id=uuid.uuid4(),
             name=raw["source_name"],
             domain=domain,
-            feed_url=None,          # RSS URL 은 수집기가 알고 있음 — 추후 연결
+            feed_url=raw.get("feed_url"),
             feed_type=raw["feed_type"],
             language_code=raw["language_code"],
             tier="domestic" if raw["language_code"] == "ko" else "international",

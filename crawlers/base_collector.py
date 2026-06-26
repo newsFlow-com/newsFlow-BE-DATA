@@ -17,6 +17,7 @@ class RawArticle(TypedDict):
     """
     source_domain: str          # 언론사 도메인 (예: "hani.co.kr")
     source_name: str            # 언론사 이름 (예: "한겨레")
+    feed_url: Optional[str]     # 수집 소스 URL (RSS 피드 URL 또는 API 엔드포인트)
     original_url: str           # 기사 원문 URL (중복 제거 키)
     title: str                  # 기사 제목
     summary: Optional[str]      # 요약 / 리드문 (없으면 None)

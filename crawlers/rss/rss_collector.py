@@ -141,6 +141,7 @@ def _normalize_entry(
     return RawArticle(
         source_domain=source_domain,
         source_name=source_name,
+        feed_url=None,          # RssCollector.fetch() 에서 주입
         original_url=url.strip(),
         title=title,
         summary=summary,
@@ -201,6 +202,7 @@ class RssCollector(BaseCollector):
                 entry, self.source_name, self.source_domain, self.language_code
             )
             if article:
+                article["feed_url"] = self.feed_url
                 articles.append(article)
 
         logger.info(f"[RSS] {self.source_name}: {len(articles)}건 수집")
