@@ -9,6 +9,8 @@ from email.utils import parsedate_to_datetime
 from typing import Optional
 from urllib.parse import urlparse
 
+import re
+
 import feedparser
 import httpx
 
@@ -129,14 +131,11 @@ def _normalize_entry(
     summary: Optional[str] = None
     raw_summary = entry.get("summary") or entry.get("description")
     if raw_summary:
-        # HTML 태그 제거 (간단한 strip)
-        import re
         summary = re.sub(r"<[^>]+>", "", raw_summary).strip() or None
 
     if not summary:
         content_list = entry.get("content", [])
         if content_list:
-            import re
             summary = re.sub(r"<[^>]+>", "", content_list[0].get("value", "")).strip() or None
 
     return RawArticle(

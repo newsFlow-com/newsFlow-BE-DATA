@@ -197,6 +197,7 @@ def _upsert_keywords(
         session: Session,
         article_id: uuid.UUID,
         keywords: list[dict],
+        language_code: str = "ko",
 ) -> None:
     """
     키워드 추출 결과를 keywords 와 article_keywords 에 적재한다.
@@ -211,7 +212,7 @@ def _upsert_keywords(
                 id=uuid.uuid4(),
                 word=word,
                 word_normalized=word.lower(),
-                language_code="ko",
+                language_code=language_code,
             )
             .on_conflict_do_nothing(index_elements=["word"])
             .returning(Keyword.id)
@@ -307,6 +308,7 @@ def write_articles(classified_articles: list[ClassifiedArticle]) -> WriteResult:
 
     with get_session() as session:
         for ca in classified_articles:
+            source_id: Optional[uuid.UUID] = None
             try:
                 # 1. Source
                 source_id = _upsert_source(session, ca)
@@ -324,7 +326,7 @@ def write_articles(classified_articles: list[ClassifiedArticle]) -> WriteResult:
                 _upsert_categories(session, article_id, ca.categories)
 
                 # 4. Keywords
-                _upsert_keywords(session, article_id, ca.keywords)
+                _upsert_keywords(session, article_id, ca.keywords, ca.article["language_code"])
 
                 result.inserted += 1
                 source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0})
@@ -335,8 +337,9 @@ def write_articles(classified_articles: list[ClassifiedArticle]) -> WriteResult:
                 logger.error(
                     f"[Writer] 적재 실패: {ca.article['original_url'][:60]} — {e}"
                 )
-                source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0})
-                source_stats[source_id]["err"] += 1
+                if source_id is not None:
+                    source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0})
+                    source_stats[source_id]["err"] += 1
 
         # 5. CollectLog 기록
         for src_id, stats in source_stats.items():

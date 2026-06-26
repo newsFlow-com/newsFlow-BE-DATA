@@ -24,6 +24,7 @@ from app.models import (
     DailyUserStat,
     PipelineStat,
     ShareLog,
+    SocialAccount,
     User,
 )
 
@@ -171,15 +172,12 @@ def aggregate_daily_user_stats(target_date: Optional[date] = None) -> None:
 
         kakao_signups = session.execute(
             select(func.count(User.id))
-            .join(
-                __import__("app.models", fromlist=["SocialAccount"]).SocialAccount,
-                __import__("app.models", fromlist=["SocialAccount"]).SocialAccount.user_id == User.id,
-                )
+            .join(SocialAccount, SocialAccount.user_id == User.id)
             .where(
                 and_(
-                    __import__("app.models", fromlist=["SocialAccount"]).SocialAccount.provider == "kakao",
+                    SocialAccount.provider == "kakao",
                     User.created_at.between(start_dt, end_dt),
-                    )
+                )
             )
         ).scalar() or 0
 
