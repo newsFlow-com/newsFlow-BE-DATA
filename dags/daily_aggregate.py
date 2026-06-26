@@ -58,6 +58,20 @@ def aggregate_pipeline_stats(**context):
     logger.info("[DAG] aggregate_pipeline_stats 완료")
 
 
+def collect_trending_keywords(**context):
+    """Google Trends 키워드 수집 → trending_keywords 적재."""
+    from crawlers.trends.trends_collector import collect_trends
+    from app.db.writer import write_trending_keywords
+
+    execution_date = context["execution_date"]
+    target_date = (execution_date - timedelta(days=1)).date()
+
+    results = collect_trends(target_date=target_date)
+    count = write_trending_keywords(results)
+    context["ti"].xcom_push(key="trending_keyword_count", value=count)
+    logger.info(f"[DAG] collect_trending_keywords 완료: {count}건 ({target_date})")
+
+
 with DAG(
         dag_id="daily_aggregate",
         default_args=default_args,
@@ -82,4 +96,9 @@ with DAG(
         python_callable=aggregate_pipeline_stats,
     )
 
-    task_article >> task_user >> task_pipeline
+    task_trends = PythonOperator(
+        task_id="collect_trending_keywords",
+        python_callable=collect_trending_keywords,
+    )
+
+    task_article >> task_user >> task_pipeline >> task_trends

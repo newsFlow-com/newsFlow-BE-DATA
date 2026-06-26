@@ -34,6 +34,7 @@ from app.models import (
     CollectLog,
     Keyword,
     Source,
+    TrendingKeyword,
 )
 from pipelines.classifier import ClassifiedArticle
 
@@ -380,3 +381,64 @@ def fetch_existing_urls(limit: int = 50_000) -> set[str]:
             select(Article.original_url).limit(limit)
         ).fetchall()
     return {row[0] for row in rows}
+
+
+def write_trending_keywords(results: list) -> int:
+    """
+    TrendsResult 목록을 trending_keywords 테이블에 upsert한다.
+    동일 (keyword, trend_date) 이 존재하면 search_volume_index 와 rank 를 갱신한다.
+
+    Args:
+        results: TrendsResult 리스트 (trends_collector.collect_trends() 반환값)
+
+    Returns:
+        upsert된 건수
+    """
+    if not results:
+        return 0
+
+    upsert_count = 0
+    with get_session() as session:
+        for rank, trend in enumerate(results, start=1):
+            # keywords upsert
+            kw_stmt = (
+                pg_insert(Keyword)
+                .values(
+                    id=uuid.uuid4(),
+                    word=trend.keyword,
+                    word_normalized=trend.keyword.lower(),
+                    language_code="ko",
+                )
+                .on_conflict_do_nothing(index_elements=["word"])
+                .returning(Keyword.id)
+            )
+            row = session.execute(kw_stmt).fetchone()
+            keyword_id = row[0] if row else session.execute(
+                select(Keyword.id).where(Keyword.word == trend.keyword)
+            ).scalar_one()
+
+            # trending_keywords upsert
+            tk_stmt = (
+                pg_insert(TrendingKeyword)
+                .values(
+                    id=uuid.uuid4(),
+                    keyword_id=keyword_id,
+                    trend_date=trend.trend_date,
+                    trend_type="daily",
+                    rank=rank,
+                    search_volume_index=trend.search_volume_index,
+                    source="pytrends",
+                )
+                .on_conflict_do_update(
+                    index_elements=["keyword_id", "trend_date"],
+                    set_={
+                        "rank": rank,
+                        "search_volume_index": trend.search_volume_index,
+                    },
+                )
+            )
+            session.execute(tk_stmt)
+            upsert_count += 1
+
+    logger.info(f"[Writer] trending_keywords upsert 완료: {upsert_count}건")
+    return upsert_count
