@@ -7,7 +7,8 @@ pipelines/preprocessor.py
   2. 제목 정제 (언론사명 접미사 제거, 공백 정리)
   3. 요약 정제 (HTML 태그 제거, 길이 제한)
   4. 발행 시각 보정 (None 이면 수집 시각으로 대체)
-  5. 언론사 도메인 → sources 테이블 매핑 (upsert 준비)
+  5. 본문 수집 (content가 None 이면 newspaper4k로 원문 URL 크롤링)
+  6. 언론사 도메인 → sources 테이블 매핑 (upsert 준비)
 """
 import logging
 import re
@@ -81,6 +82,23 @@ def _truncate(text: Optional[str], max_len: int) -> Optional[str]:
     return text[:max_len] if len(text) > max_len else text
 
 
+def _fetch_content(url: str) -> Optional[str]:
+    """
+    newspaper4k로 기사 원문 URL을 방문해 본문을 추출한다.
+    실패 시 None 반환 (본문 없이도 적재는 계속 진행).
+    """
+    try:
+        from newspaper import Article as NewspaperArticle
+        article = NewspaperArticle(url)
+        article.download()
+        article.parse()
+        text = article.text.strip()
+        return text if len(text) > 100 else None
+    except Exception as e:
+        logger.debug(f"[본문수집] 실패 ({url[:60]}): {e}")
+        return None
+
+
 def preprocess(article: RawArticle) -> Optional[RawArticle]:
     """
     RawArticle 하나를 정제해서 반환.
@@ -113,14 +131,18 @@ def preprocess(article: RawArticle) -> Optional[RawArticle]:
         published_at = datetime.now(tz=timezone.utc)
         logger.debug(f"[전처리] 발행 시각 없음 → 수집 시각으로 대체: {clean_title[:30]}")
 
-    # 5. 정제된 RawArticle 반환
+    # 5. 본문 수집 (RSS/무료 API는 content=None → newspaper4k로 원문 크롤링)
+    content = article.get("content") or _fetch_content(clean_url)
+
+    # 6. 정제된 RawArticle 반환
     return RawArticle(
         source_domain=article["source_domain"],
         source_name=article["source_name"],
+        feed_url=article.get("feed_url"),
         original_url=clean_url,
         title=clean_title,
         summary=clean_summary,
-        content=article.get("content"),
+        content=content,
         thumbnail_url=article.get("thumbnail_url"),
         author=article.get("author"),
         published_at=published_at,
