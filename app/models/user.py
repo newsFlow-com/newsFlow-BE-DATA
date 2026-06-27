@@ -66,6 +66,9 @@ class User(UUIDMixin, TimestampMixin, Base):
     )
     share_logs: Mapped[list["ShareLog"]] = relationship(back_populates="user")
     admin_logs: Mapped[list["AdminLog"]] = relationship(back_populates="admin")
+    article_views: Mapped[list["ArticleView"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class SocialAccount(UUIDMixin, Base):
@@ -127,5 +130,5 @@ class RefreshToken(UUIDMixin, Base):
 
 
 # 순환 참조 방지용 지연 import
-from .activity import Bookmark, ShareLog, UserCategory  # noqa: E402
+from .activity import ArticleView, Bookmark, ShareLog, UserCategory  # noqa: E402
 from .admin import AdminLog  # noqa: E402

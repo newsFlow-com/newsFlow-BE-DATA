@@ -3,6 +3,7 @@ activity.py — 사용자 활동 모델
   - bookmarks
   - user_categories
   - share_logs
+  - article_views
 """
 import uuid
 from datetime import datetime
@@ -108,6 +109,36 @@ class ShareLog(UUIDMixin, Base):
     )
 
     user: Mapped[Optional["User"]] = relationship(back_populates="share_logs")
+
+
+class ArticleView(UUIDMixin, Base):
+    """
+    사용자 기사 열람 이력.
+    동일 (user_id, article_id) 는 upsert — viewed_at 만 갱신.
+    추천 알고리즘에서 이미 읽은 기사 제외 및 관심 카테고리 가중치 산출에 활용.
+    """
+    __tablename__ = "article_views"
+    __table_args__ = (
+        Index("ix_av_user_article", "user_id", "article_id", unique=True),
+        Index("ix_av_user_viewed", "user_id", "viewed_at"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    article_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("articles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    viewed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="article_views")
+    article: Mapped["Article"] = relationship(back_populates="article_views")
 
 
 from .category import Category  # noqa: E402

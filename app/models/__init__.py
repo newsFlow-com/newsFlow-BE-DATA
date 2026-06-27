@@ -31,7 +31,7 @@ from .stats import (  # noqa: F401
 )
 
 # ── 사용자 활동
-from .activity import Bookmark, ShareLog, UserCategory  # noqa: F401
+from .activity import ArticleView, Bookmark, ShareLog, UserCategory  # noqa: F401
 
 # ── 관리자
 from .admin import (  # noqa: F401
@@ -59,7 +59,7 @@ __all__ = [
     # stats
     "DailyArticleStat", "DailyUserStat", "PipelineStat", "ApiRequestLog",
     # activity
-    "Bookmark", "UserCategory", "ShareLog",
+    "Bookmark", "UserCategory", "ShareLog", "ArticleView",
     # admin
     "AdminLog", "CollectLog", "ContentQualityLog",
     "ArticleReport", "Notice", "Banner",
