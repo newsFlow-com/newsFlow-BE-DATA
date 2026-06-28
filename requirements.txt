@@ -1,5 +1,6 @@
 # ── 크롤링 / 수집 ────────────────────────────────────────────────
-scrapy==2.11.2
+scrapy==2.12.0
+Twisted>=22.10.0,<24.11.0
 feedparser==6.0.11
 newspaper4k==0.9.3.1        # newspaper3k 대체 (Python 3.11+ 호환)
 beautifulsoup4==4.12.3
