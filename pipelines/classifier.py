@@ -121,22 +121,27 @@ def classify_category(article: RawArticle) -> list[dict]:
 
 # ── 2. 키워드 추출 ────────────────────────────────────────────────────
 
+try:
+    from kiwipiepy import Kiwi as _Kiwi
+    _kiwi = _Kiwi()
+except Exception:
+    _kiwi = None
+
+
 def _extract_keywords_kiwi(text: str, top_n: int = 10) -> list[dict]:
     """
     kiwipiepy 형태소 분석기로 명사를 추출하고 TF 점수로 정렬한다.
     설치 실패 시 regex 폴백으로 전환.
     """
     try:
-        from kiwipiepy import Kiwi
-        kiwi = Kiwi()
-        tokens = kiwi.tokenize(text)
-        # NNG(일반명사), NNP(고유명사), SL(외국어) 품사만 추출
+        if _kiwi is None:
+            raise ImportError
+        tokens = _kiwi.tokenize(text)
         nouns = [
             tok.form for tok in tokens
             if tok.tag in ("NNG", "NNP", "SL") and len(tok.form) >= 2
         ]
     except Exception:
-        # kiwipiepy 사용 불가 시 간단한 regex 폴백
         nouns = re.findall(r"[가-힣a-zA-Z]{2,}", text)
 
     if not nouns:
