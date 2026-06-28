@@ -59,7 +59,7 @@ services:
 
   # ── Airflow ──────────────────────────────────────────────────────
   airflow:
-    image: apache/airflow:2.9.1
+    image: apache/airflow:2.10.4
     container_name: newsflow-airflow
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -68,17 +68,16 @@ services:
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__WEBSERVER__SECRET_KEY: newsflow-airflow-secret
-      # DAG에서 app.models 등 프로젝트 패키지를 임포트할 수 있도록 경로 추가
       PYTHONPATH: /opt/newsflow
-      # DAG에서 NewsFlow DB 접근 시 사용할 환경변수
       DATABASE_URL: postgresql+psycopg2://newsflow:newsflow1234@postgres:5432/newsflow
+      # 수집 스크립트 전용 venv — Airflow(SQLAlchemy 1.4)와 환경 분리
+      NEWSFLOW_PYTHON: /home/airflow/newsflow-venv/bin/python
     ports:
       - "8082:8080"
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - airflow_plugins:/opt/airflow/plugins
-      # 프로젝트 루트 마운트 → alembic, app/models, crawlers, pipelines 접근 가능
       - .:/opt/newsflow
     depends_on:
       postgres:
@@ -89,16 +88,11 @@ services:
       - newsflow-network
     command: >
       bash -c "
-        pip install -r /opt/newsflow/requirements.txt -q &&
+        python -m venv /home/airflow/newsflow-venv --system-site-packages &&
+        /home/airflow/newsflow-venv/bin/pip install -r /opt/newsflow/requirements.txt -q &&
         airflow db migrate &&
-        airflow users create
-          --username admin
-          --password admin
-          --firstname NewsFlow
-          --lastname Admin
-          --role Admin
-          --email admin@newsflow.com || true &&
-        cd /opt/newsflow && alembic upgrade head &&
+        airflow users create --username admin --password admin --firstname NewsFlow --lastname Admin --role Admin --email admin@newsflow.com || true &&
+        cd /opt/newsflow && /home/airflow/newsflow-venv/bin/alembic upgrade head || true &&
         airflow webserver & airflow scheduler
       "
 
