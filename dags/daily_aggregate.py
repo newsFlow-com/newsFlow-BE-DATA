@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import logging
 from datetime import datetime, timezone, timedelta
@@ -20,56 +21,55 @@ default_args = {
 }
 
 
+_NEWSFLOW_PYTHON = os.environ.get("NEWSFLOW_PYTHON", sys.executable)
+
+
+def _run_subprocess(script_name: str, *args) -> None:
+    """scripts/ 디렉토리의 스크립트를 venv Python으로 실행한다 (SQLAlchemy 2.0 환경)."""
+    script_path = os.path.join(_project_root, "scripts", script_name)
+    env = {**os.environ, "PYTHONPATH": _project_root}
+    proc = subprocess.run(
+        [_NEWSFLOW_PYTHON, script_path, *args],
+        cwd=_project_root,
+        env=env,
+        timeout=600,
+        capture_output=True,
+        text=True,
+    )
+    if proc.stdout:
+        logger.info(f"[{script_name}]\n{proc.stdout[-2000:]}")
+    if proc.returncode != 0:
+        logger.error(f"[{script_name}] stderr:\n{proc.stderr[-1000:]}")
+        raise RuntimeError(f"[{script_name}] 종료 코드 {proc.returncode}")
+
+
 def aggregate_daily(**context):
-    """기사별 일별 조회수·북마크·공유·트렌드 점수 집계."""
-    from app.db.aggregator import aggregate_daily_article_stats
-
     execution_date = context["execution_date"]
-    target_date = (execution_date - timedelta(days=1)).date()
-
-    count = aggregate_daily_article_stats(target_date=target_date)
-    context["ti"].xcom_push(key="article_stat_count", value=count)
-    logger.info(f"[DAG] aggregate_daily 완료: {count}건 ({target_date})")
+    target_date = (execution_date - timedelta(days=1)).date().isoformat()
+    _run_subprocess("aggregate_daily.py", "--target_date", target_date)
 
 
 def aggregate_user_stats(**context):
-    """사용자 현황 일별 스냅샷 (DAU/MAU/신규/이탈률) 집계."""
-    from app.db.aggregator import aggregate_daily_user_stats
-
     execution_date = context["execution_date"]
-    target_date = (execution_date - timedelta(days=1)).date()
-
-    aggregate_daily_user_stats(target_date=target_date)
-    logger.info(f"[DAG] aggregate_user_stats 완료 ({target_date})")
+    target_date = (execution_date - timedelta(days=1)).date().isoformat()
+    _run_subprocess("aggregate_user_stats.py", "--target_date", target_date)
 
 
 def aggregate_pipeline_stats(**context):
-    """당일 수집 파이프라인 실행 요약 지표 기록."""
-    from app.db.aggregator import aggregate_pipeline_stats
-
     dag_run = context["dag_run"]
-    started_at = dag_run.start_date or datetime.now(tz=timezone.utc)
-
-    aggregate_pipeline_stats(
-        dag_id="daily_aggregate",
-        run_id=dag_run.run_id,
-        started_at=started_at,
+    started_at = (dag_run.start_date or datetime.now(tz=timezone.utc)).isoformat()
+    _run_subprocess(
+        "aggregate_pipeline_stats.py",
+        "--dag_id", "daily_aggregate",
+        "--run_id", dag_run.run_id,
+        "--started_at", started_at,
     )
-    logger.info("[DAG] aggregate_pipeline_stats 완료")
 
 
 def collect_trending_keywords(**context):
-    """Google Trends 키워드 수집 → trending_keywords 적재."""
-    from crawlers.trends.trends_collector import collect_trends
-    from app.db.writer import write_trending_keywords
-
     execution_date = context["execution_date"]
-    target_date = (execution_date - timedelta(days=1)).date()
-
-    results = collect_trends(target_date=target_date)
-    count = write_trending_keywords(results)
-    context["ti"].xcom_push(key="trending_keyword_count", value=count)
-    logger.info(f"[DAG] collect_trending_keywords 완료: {count}건 ({target_date})")
+    target_date = (execution_date - timedelta(days=1)).date().isoformat()
+    _run_subprocess("collect_trending_keywords.py", "--target_date", target_date)
 
 
 with DAG(
