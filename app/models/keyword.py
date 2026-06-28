@@ -91,7 +91,7 @@ class TrendingKeyword(UUIDMixin, Base):
     __tablename__ = "trending_keywords"
     __table_args__ = (
         Index("ix_tk_date_rank", "trend_date", "rank"),
-        Index("ix_tk_keyword_date", "keyword_id", "trend_date"),
+        Index("ix_tk_keyword_date", "keyword_id", "trend_date", unique=True),
         Index("ix_tk_type", "trend_type"),
     )
 
