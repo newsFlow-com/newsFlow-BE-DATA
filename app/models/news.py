@@ -76,6 +76,7 @@ class Article(UUIDMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     thumbnail_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     author: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     language_code: Mapped[str] = mapped_column(String(10), nullable=False, default="ko")

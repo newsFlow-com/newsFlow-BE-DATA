@@ -306,12 +306,13 @@ def _write_collect_log(
 
 class WriteResult:
     """적재 결과 요약."""
-    __slots__ = ("inserted", "skipped", "errors")
+    __slots__ = ("inserted", "skipped", "errors", "inserted_ids")
 
     def __init__(self) -> None:
         self.inserted = 0
         self.skipped = 0
         self.errors = 0
+        self.inserted_ids: list[uuid.UUID] = []
 
     def __repr__(self) -> str:
         return (
@@ -363,6 +364,7 @@ def write_articles(classified_articles: list[ClassifiedArticle]) -> WriteResult:
                 _write_quality_log(session, article_id, ca.categories, ca.keywords)
 
                 result.inserted += 1
+                result.inserted_ids.append(article_id)
                 source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0, "err_msg": None})
                 source_stats[source_id]["inserted"] += 1
 

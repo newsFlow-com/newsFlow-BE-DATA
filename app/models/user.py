@@ -69,6 +69,12 @@ class User(UUIDMixin, TimestampMixin, Base):
     article_views: Mapped[list["ArticleView"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    subscriptions: Mapped[list["Subscription"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    notifications: Mapped[list["UserNotification"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class SocialAccount(UUIDMixin, Base):

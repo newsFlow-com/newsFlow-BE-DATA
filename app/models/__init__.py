@@ -43,6 +43,9 @@ from .admin import (  # noqa: F401
     Notice,
 )
 
+# ── 알림
+from .notification import Subscription, UserNotification  # noqa: F401
+
 __all__ = [
     # base
     "Base", "TimestampMixin", "UUIDMixin",
@@ -63,4 +66,6 @@ __all__ = [
     # admin
     "AdminLog", "CollectLog", "ContentQualityLog",
     "ArticleReport", "Notice", "Banner",
+    # notification
+    "Subscription", "UserNotification",
 ]

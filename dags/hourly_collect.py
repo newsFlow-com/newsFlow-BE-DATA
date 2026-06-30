@@ -55,6 +55,14 @@ def collect_naver_news(**context):
     _run_subprocess("collect_naver_news.py")
 
 
+def summarize_articles(**context):
+    _run_subprocess("summarize_articles.py", "--hours", "2", "--limit", "50")
+
+
+def notify_subscribers(**context):
+    _run_subprocess("notify_subscribers.py", "--hours", "2")
+
+
 def collect_scrapy(spider_name: str, **context):
     """
     Scrapy 스파이더를 subprocess로 실행한다.
@@ -130,6 +138,19 @@ with DAG(
         op_kwargs={"spider_name": "zdnet"},
     )
 
-    # RSS → NewsAPI → 네이버 순차 실행 (DB 부하 분산)
-    # 네이버 완료 후 Scrapy 4개 병렬 실행
-    task_rss >> task_api >> task_naver >> [task_chosun, task_joongang, task_yonhap, task_zdnet]
+    task_summarize = PythonOperator(
+        task_id="summarize_articles",
+        python_callable=summarize_articles,
+    )
+
+    task_notify = PythonOperator(
+        task_id="notify_subscribers",
+        python_callable=notify_subscribers,
+    )
+
+    scrapy_tasks = [task_chosun, task_joongang, task_yonhap, task_zdnet]
+
+    # RSS → NewsAPI → 네이버 순차, 네이버 완료 후 Scrapy 4개 병렬
+    # Scrapy 완료 후 AI 요약 → 알림 발송 순차 실행
+    task_rss >> task_api >> task_naver >> scrapy_tasks
+    scrapy_tasks >> task_summarize >> task_notify
