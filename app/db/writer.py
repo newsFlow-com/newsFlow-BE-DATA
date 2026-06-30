@@ -32,6 +32,7 @@ from app.models import (
     ArticleKeyword,
     Category,
     CollectLog,
+    ContentQualityLog,
     Keyword,
     Source,
     TrendingKeyword,
@@ -246,7 +247,34 @@ def _upsert_keywords(
 
 
 # ══════════════════════════════════════════════════════════════════
-# 5. CollectLog 기록
+# 5. ContentQualityLog 기록
+# ══════════════════════════════════════════════════════════════════
+
+def _write_quality_log(
+        session: Session,
+        article_id: uuid.UUID,
+        categories: list[dict],
+        keywords: list[dict],
+) -> None:
+    """
+    분류기 실행 결과를 content_quality_logs 에 기록한다.
+    is_correct = NULL (관리자 검수 전 미판정 상태).
+    check_type = "ai_category" — 카테고리 분류 결과 감사용.
+    """
+    session.add(ContentQualityLog(
+        id=uuid.uuid4(),
+        article_id=article_id,
+        check_type="ai_category",
+        is_correct=None,
+        original_value={
+            "categories": categories,
+            "top_keyword_count": len(keywords),
+        },
+    ))
+
+
+# ══════════════════════════════════════════════════════════════════
+# 6. CollectLog 기록
 # ══════════════════════════════════════════════════════════════════
 
 def _write_collect_log(
@@ -330,6 +358,9 @@ def write_articles(classified_articles: list[ClassifiedArticle]) -> WriteResult:
 
                 # 4. Keywords
                 _upsert_keywords(session, article_id, ca.keywords, ca.article["language_code"])
+
+                # 5. 품질 로그 (관리자 분류 검수용)
+                _write_quality_log(session, article_id, ca.categories, ca.keywords)
 
                 result.inserted += 1
                 source_stats.setdefault(source_id, {"inserted": 0, "dup": 0, "err": 0, "err_msg": None})
