@@ -72,6 +72,10 @@ def collect_trending_keywords(**context):
     _run_subprocess("collect_trending_keywords.py", "--target_date", target_date)
 
 
+def seed_redis_trending(**context):
+    _run_subprocess("seed_redis_trending.py", "--days", "7", "--top_n", "100")
+
+
 with DAG(
         dag_id="daily_aggregate",
         default_args=default_args,
@@ -101,4 +105,10 @@ with DAG(
         python_callable=collect_trending_keywords,
     )
 
+    task_redis_seed = PythonOperator(
+        task_id="seed_redis_trending",
+        python_callable=seed_redis_trending,
+    )
+
     task_article >> task_user >> task_pipeline >> task_trends
+    task_article >> task_redis_seed
