@@ -46,6 +46,9 @@ from .admin import (  # noqa: F401
 # ── 알림
 from .notification import Subscription, UserNotification  # noqa: F401
 
+# ── B2B
+from .b2b import ApiKey  # noqa: F401
+
 __all__ = [
     # base
     "Base", "TimestampMixin", "UUIDMixin",
@@ -68,4 +71,6 @@ __all__ = [
     "ArticleReport", "Notice", "Banner",
     # notification
     "Subscription", "UserNotification",
+    # b2b
+    "ApiKey",
 ]
