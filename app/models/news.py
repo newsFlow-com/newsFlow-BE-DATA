@@ -85,6 +85,11 @@ class Article(UUIDMixin, TimestampMixin, Base):
         String(20), nullable=False, default="active",
         comment="active | hidden | deleted"
     )
+    sentiment: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True,
+        comment="positive | negative | neutral"
+    )
+    sentiment_score: Mapped[Optional[float]] = mapped_column(nullable=True)
     view_count: Mapped[int] = mapped_column(Integer, default=0)
     published_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
