@@ -29,7 +29,7 @@ def _tokenize(text: str) -> set[str]:
     제목을 2-gram 토큰 셋으로 변환.
     한국어는 어절 분리보다 2-gram 이 중복 감지에 효과적이다.
     """
-    text = re.sub(r"\s+", " ", text.lower().strip())
+    text = re.sub(r"\s+", "", text.lower().strip())
     if len(text) < 2:
         return {text}
     return {text[i:i+2] for i in range(len(text) - 1)}

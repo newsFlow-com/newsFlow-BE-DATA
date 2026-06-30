@@ -64,8 +64,7 @@ class TestClassifyCategory:
 class TestExtractKeywords:
     def test_키워드_추출(self):
         article = _make_article("삼성전자 반도체 실적 발표", "반도체 수출 증가")
-        with patch("pipelines.classifier.Kiwi") as MockKiwi:
-            mock_kiwi = MockKiwi.return_value
+        with patch("pipelines.classifier._kiwi") as mock_kiwi:
             mock_kiwi.tokenize.return_value = []
             result = extract_keywords(article)
         assert isinstance(result, list)
