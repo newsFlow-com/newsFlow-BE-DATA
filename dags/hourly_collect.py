@@ -67,6 +67,10 @@ def index_to_elasticsearch(**context):
     _run_subprocess("reindex_all.py", "--limit", "200")
 
 
+def analyze_sentiment(**context):
+    _run_subprocess("analyze_sentiment.py", "--limit", "100")
+
+
 def collect_scrapy(spider_name: str, **context):
     """
     Scrapy 스파이더를 subprocess로 실행한다.
@@ -157,9 +161,14 @@ with DAG(
         python_callable=index_to_elasticsearch,
     )
 
+    task_sentiment = PythonOperator(
+        task_id="analyze_sentiment",
+        python_callable=analyze_sentiment,
+    )
+
     scrapy_tasks = [task_chosun, task_joongang, task_yonhap, task_zdnet]
 
     # RSS → NewsAPI → 네이버 순차, 네이버 완료 후 Scrapy 4개 병렬
-    # Scrapy 완료 후 AI 요약 → [알림 발송, ES 인덱싱] 병렬 실행
+    # Scrapy 완료 후 AI 요약 → [알림 발송, ES 인덱싱, 감성 분석] 병렬 실행
     task_rss >> task_api >> task_naver >> scrapy_tasks
-    scrapy_tasks >> task_summarize >> [task_notify, task_index]
+    scrapy_tasks >> task_summarize >> [task_notify, task_index, task_sentiment]
