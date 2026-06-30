@@ -63,6 +63,10 @@ def notify_subscribers(**context):
     _run_subprocess("notify_subscribers.py", "--hours", "2")
 
 
+def index_to_elasticsearch(**context):
+    _run_subprocess("reindex_all.py", "--limit", "200")
+
+
 def collect_scrapy(spider_name: str, **context):
     """
     Scrapy 스파이더를 subprocess로 실행한다.
@@ -148,9 +152,14 @@ with DAG(
         python_callable=notify_subscribers,
     )
 
+    task_index = PythonOperator(
+        task_id="index_to_elasticsearch",
+        python_callable=index_to_elasticsearch,
+    )
+
     scrapy_tasks = [task_chosun, task_joongang, task_yonhap, task_zdnet]
 
     # RSS → NewsAPI → 네이버 순차, 네이버 완료 후 Scrapy 4개 병렬
-    # Scrapy 완료 후 AI 요약 → 알림 발송 순차 실행
+    # Scrapy 완료 후 AI 요약 → [알림 발송, ES 인덱싱] 병렬 실행
     task_rss >> task_api >> task_naver >> scrapy_tasks
-    scrapy_tasks >> task_summarize >> task_notify
+    scrapy_tasks >> task_summarize >> [task_notify, task_index]
