@@ -61,6 +61,16 @@ services:
       timeout: 10s
       retries: 5
 
+  # ── MailHog (로컬 개발용 메일 캐처) ─────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: newsflow-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - newsflow-network
+
   # ── Redis (조회수 캐시 / 인기 기사 랭킹) ─────────────────────────
   redis:
     image: redis:7.2
