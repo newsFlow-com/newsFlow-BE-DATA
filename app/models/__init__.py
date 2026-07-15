@@ -19,6 +19,9 @@ from .category import ArticleCategory, Category  # noqa: F401
 # ── 키워드 & 트렌드
 from .keyword import ArticleKeyword, Keyword, TrendingKeyword  # noqa: F401
 
+# ── 이슈 클러스터링
+from .issue import Issue, IssueKeyword  # noqa: F401
+
 # ── 주식
 from .stock import ArticleStock, Stock, StockPrice  # noqa: F401
 
@@ -60,6 +63,8 @@ __all__ = [
     "Category", "ArticleCategory",
     # keyword
     "Keyword", "ArticleKeyword", "TrendingKeyword",
+    # issue
+    "Issue", "IssueKeyword",
     # stock
     "Stock", "ArticleStock", "StockPrice",
     # stats

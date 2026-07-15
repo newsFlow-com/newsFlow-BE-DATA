@@ -90,6 +90,9 @@ class Article(UUIDMixin, TimestampMixin, Base):
         comment="positive | negative | neutral"
     )
     sentiment_score: Mapped[Optional[float]] = mapped_column(nullable=True)
+    issue_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="SET NULL"), nullable=True
+    )
     view_count: Mapped[int] = mapped_column(Integer, default=0)
     published_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -124,6 +127,9 @@ class Article(UUIDMixin, TimestampMixin, Base):
     quality_logs: Mapped[list["ContentQualityLog"]] = relationship(
         back_populates="article", cascade="all, delete-orphan"
     )
+    issue: Mapped[Optional["Issue"]] = relationship(
+        back_populates="articles", foreign_keys=[issue_id]
+    )
 
 
 # 순환 참조 방지
@@ -132,6 +138,7 @@ from sqlalchemy import Boolean  # noqa: E402 — Boolean은 Source에서도 필�
 from .activity import ArticleView, Bookmark  # noqa: E402
 from .admin import AdminLog, ArticleReport, CollectLog, ContentQualityLog  # noqa: E402
 from .category import ArticleCategory  # noqa: E402
+from .issue import Issue  # noqa: E402
 from .keyword import ArticleKeyword  # noqa: E402
 from .stats import DailyArticleStat  # noqa: E402
 from .stock import ArticleStock  # noqa: E402
