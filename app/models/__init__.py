@@ -31,6 +31,7 @@ from .stats import (  # noqa: F401
     DailyArticleStat,
     DailyUserStat,
     PipelineStat,
+    SourceSentimentStat,
 )
 
 # ── 사용자 활동
@@ -69,6 +70,7 @@ __all__ = [
     "Stock", "ArticleStock", "StockPrice",
     # stats
     "DailyArticleStat", "DailyUserStat", "PipelineStat", "ApiRequestLog",
+    "SourceSentimentStat",
     # activity
     "Bookmark", "UserCategory", "ShareLog", "ArticleView",
     # admin

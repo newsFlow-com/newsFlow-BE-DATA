@@ -1,9 +1,10 @@
 """
 stats.py — 통계 집계 테이블
-  - daily_article_stats   : 기사별 일별 지표 (Airflow 배치)
-  - daily_user_stats      : 사용자 현황 일별 스냅샷 (관리자 대시보드)
-  - pipeline_stats        : 수집 파이프라인 실행 지표 (관리자 대시보드)
-  - api_request_logs      : API 요청 성능 로그 (관리자 대시보드)
+  - daily_article_stats     : 기사별 일별 지표 (Airflow 배치)
+  - daily_user_stats        : 사용자 현황 일별 스냅샷 (관리자 대시보드)
+  - pipeline_stats          : 수집 파이프라인 실행 지표 (관리자 대시보드)
+  - api_request_logs        : API 요청 성능 로그 (관리자 대시보드)
+  - source_sentiment_stats  : 매체×카테고리별 일별 감성 집계 (언론사 논조 비교)
 """
 import uuid
 from datetime import date, datetime
@@ -16,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, UUIDMixin
+from .base import Base, TimestampMixin, UUIDMixin
 
 
 # ── 1. 기사 일별 통계 ─────────────────────────────────────────────
@@ -158,4 +159,34 @@ class ApiRequestLog(UUIDMixin, Base):
     )
 
 
-from .news import Article  # noqa: E402
+# ── 5. 매체×카테고리별 일별 감성 집계 ──────────────────────────────
+
+class SourceSentimentStat(UUIDMixin, TimestampMixin, Base):
+    """
+    매체(Source) × 카테고리 단위 일별 감성 집계.
+    Airflow daily_aggregate DAG 가 매일 자정 후 집계해 upsert 한다.
+    언론사 논조 비교 기능(같은 카테고리에서 매체별 긍정/부정 비율)의 기반 데이터.
+    """
+    __tablename__ = "source_sentiment_stats"
+    __table_args__ = (
+        Index("ix_sss_source_category_date", "source_id", "category_id", "stat_date", unique=True),
+        Index("ix_sss_date", "stat_date"),
+    )
+
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sources.id", ondelete="CASCADE"), nullable=False,
+    )
+    category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("categories.id", ondelete="CASCADE"), nullable=True,
+    )
+    stat_date: Mapped[date] = mapped_column(Date, nullable=False)
+    positive_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    negative_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    neutral_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    source: Mapped["Source"] = relationship()
+    category: Mapped[Optional["Category"]] = relationship()
+
+
+from .category import Category  # noqa: E402
+from .news import Article, Source  # noqa: E402
