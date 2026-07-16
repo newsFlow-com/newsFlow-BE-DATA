@@ -66,6 +66,12 @@ def aggregate_pipeline_stats(**context):
     )
 
 
+def aggregate_source_sentiment(**context):
+    execution_date = context["execution_date"]
+    target_date = (execution_date - timedelta(days=1)).date().isoformat()
+    _run_subprocess("aggregate_source_sentiment.py", "--target_date", target_date)
+
+
 def collect_trending_keywords(**context):
     execution_date = context["execution_date"]
     target_date = (execution_date - timedelta(days=1)).date().isoformat()
@@ -110,5 +116,11 @@ with DAG(
         python_callable=seed_redis_trending,
     )
 
+    task_source_sentiment = PythonOperator(
+        task_id="aggregate_source_sentiment",
+        python_callable=aggregate_source_sentiment,
+    )
+
     task_article >> task_user >> task_pipeline >> task_trends
     task_article >> task_redis_seed
+    task_article >> task_source_sentiment

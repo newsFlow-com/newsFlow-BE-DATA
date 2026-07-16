@@ -3,12 +3,14 @@ app/db/aggregator.py
 Airflow daily_aggregate DAG 에서 호출하는 집계 쿼리 모음.
 
 집계 항목:
-  1. daily_article_stats  — 기사별 일별 조회수·북마크·공유·트렌드 점수
-  2. daily_user_stats     — 사용자 현황 스냅샷 (DAU, 신규, 이탈 등)
-  3. pipeline_stats       — 당일 수집 파이프라인 요약 지표
+  1. daily_article_stats     — 기사별 일별 조회수·북마크·공유·트렌드 점수
+  2. daily_user_stats        — 사용자 현황 스냅샷 (DAU, 신규, 이탈 등)
+  3. pipeline_stats          — 당일 수집 파이프라인 요약 지표
+  4. source_sentiment_stats  — 매체×카테고리별 일별 감성 집계 (언론사 논조 비교)
 """
 import logging
 import uuid
+from collections import defaultdict
 from datetime import date, datetime, timezone, timedelta
 from typing import Optional
 
@@ -18,6 +20,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.db.session import get_session
 from app.models import (
     Article,
+    ArticleCategory,
     Bookmark,
     CollectLog,
     DailyArticleStat,
@@ -25,6 +28,7 @@ from app.models import (
     PipelineStat,
     ShareLog,
     SocialAccount,
+    SourceSentimentStat,
     User,
 )
 
@@ -292,3 +296,88 @@ def aggregate_pipeline_stats(
         f"[집계] pipeline_stats 완료 — "
         f"수집: {total_collected}건 / 중복: {total_duplicate}건 / 오류: {total_error}건"
     )
+
+
+# ══════════════════════════════════════════════════════════════════
+# 4. 매체×카테고리별 일별 감성 집계
+# ══════════════════════════════════════════════════════════════════
+
+def aggregate_source_sentiment_stats(target_date: Optional[date] = None) -> int:
+    """
+    target_date 기준 매체(source)×카테고리별 감성 집계를 source_sentiment_stats 에 upsert.
+    감성 분석이 완료된(sentiment IS NOT NULL) 기사만 대상으로 하며,
+    기사가 여러 카테고리를 가질 경우 confidence 가 가장 높은 카테고리 하나만 반영한다.
+
+    Returns:
+        upsert된 (source, category) 조합 건수
+    """
+    if target_date is None:
+        target_date = (datetime.now(tz=timezone.utc) - timedelta(days=1)).date()
+
+    start_dt = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+    end_dt = datetime.combine(target_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+
+    with get_session() as session:
+        articles = session.execute(
+            select(Article.id, Article.source_id, Article.sentiment)
+            .where(
+                Article.status == "active",
+                Article.sentiment.is_not(None),
+                Article.source_id.is_not(None),
+                Article.published_at.between(start_dt, end_dt),
+            )
+        ).all()
+
+        if not articles:
+            logger.info(f"[집계] {target_date} 감성 집계 대상 기사 없음")
+            return 0
+
+        article_ids = [a.id for a in articles]
+        top_categories = dict(
+            session.execute(
+                select(ArticleCategory.article_id, ArticleCategory.category_id)
+                .where(ArticleCategory.article_id.in_(article_ids))
+                .order_by(
+                    ArticleCategory.article_id,
+                    ArticleCategory.confidence_score.desc().nullslast(),
+                )
+                .distinct(ArticleCategory.article_id)
+            ).all()
+        )
+
+        counts: dict[tuple, dict[str, int]] = defaultdict(
+            lambda: {"positive": 0, "negative": 0, "neutral": 0}
+        )
+        for article in articles:
+            category_id = top_categories.get(article.id)
+            if category_id is None or article.sentiment not in ("positive", "negative", "neutral"):
+                continue
+            counts[(article.source_id, category_id)][article.sentiment] += 1
+
+        upsert_count = 0
+        for (source_id, category_id), sentiment_counts in counts.items():
+            stmt = (
+                pg_insert(SourceSentimentStat)
+                .values(
+                    id=uuid.uuid4(),
+                    source_id=source_id,
+                    category_id=category_id,
+                    stat_date=target_date,
+                    positive_count=sentiment_counts["positive"],
+                    negative_count=sentiment_counts["negative"],
+                    neutral_count=sentiment_counts["neutral"],
+                )
+                .on_conflict_do_update(
+                    index_elements=["source_id", "category_id", "stat_date"],
+                    set_={
+                        "positive_count": sentiment_counts["positive"],
+                        "negative_count": sentiment_counts["negative"],
+                        "neutral_count": sentiment_counts["neutral"],
+                    },
+                )
+            )
+            session.execute(stmt)
+            upsert_count += 1
+
+    logger.info(f"[집계] source_sentiment_stats: {upsert_count}건 완료 ({target_date})")
+    return upsert_count
