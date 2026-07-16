@@ -6,6 +6,7 @@ dags/daily_stock.py
   1. upsert_stock_masters  — 종목 마스터 갱신 (월 1회 권장이나 매일 실행해도 무방)
   2. collect_stock_prices  — 전일 OHLCV 수집 및 적재
   3. link_article_stocks   — 당일 수집 기사에 종목 연결
+  4. analyze_impact        — 기사-종목 연결의 발행 전후 주가 변동 계산
 """
 import os
 import subprocess
@@ -67,6 +68,10 @@ def link_article_stocks(**context):
     _run_subprocess("link_article_stocks.py", "--target_date", target_date)
 
 
+def analyze_impact(**context):
+    _run_subprocess("analyze_impact.py", "--limit", "200")
+
+
 with DAG(
         dag_id="daily_stock",
         default_args=default_args,
@@ -91,4 +96,9 @@ with DAG(
         python_callable=link_article_stocks,
     )
 
-    task_masters >> task_prices >> task_links
+    task_impact = PythonOperator(
+        task_id="analyze_impact",
+        python_callable=analyze_impact,
+    )
+
+    task_masters >> task_prices >> task_links >> task_impact
