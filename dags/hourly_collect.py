@@ -75,6 +75,10 @@ def cluster_issues(**context):
     _run_subprocess("cluster_issues.py", "--hours", "2", "--limit", "100")
 
 
+def notify_breaking_issues(**context):
+    _run_subprocess("notify_breaking_issues.py", "--hours", "2")
+
+
 def collect_scrapy(spider_name: str, **context):
     """
     Scrapy 스파이더를 subprocess로 실행한다.
@@ -175,13 +179,20 @@ with DAG(
         python_callable=cluster_issues,
     )
 
+    task_notify_breaking = PythonOperator(
+        task_id="notify_breaking_issues",
+        python_callable=notify_breaking_issues,
+    )
+
     scrapy_tasks = [task_chosun, task_joongang, task_yonhap, task_zdnet]
 
     # RSS → NewsAPI → 네이버 순차, 네이버 완료 후 Scrapy 4개 병렬
     # Scrapy 완료 후 AI 요약 → [알림 발송, ES 인덱싱, 감성 분석] 병렬 실행
     # 이슈 클러스터링은 분류 단계(카테고리·키워드)만 있으면 되므로
     # AI 요약을 기다리지 않고 수집 직후 task_summarize와 병렬로 실행한다
+    # 속보 알림은 이슈 클러스터(매체 수) 갱신 결과가 필요하므로 클러스터링 이후 실행한다
     task_rss >> task_api >> task_naver >> scrapy_tasks
     scrapy_tasks >> task_summarize
     scrapy_tasks >> task_cluster
     task_summarize >> [task_notify, task_index, task_sentiment]
+    task_cluster >> task_notify_breaking

@@ -6,7 +6,7 @@ import logging
 import os
 import smtplib
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 
 from sqlalchemy import select
@@ -14,6 +14,7 @@ from sqlalchemy import select
 from app.db.session import get_session
 from app.models.keyword import ArticleKeyword, Keyword
 from app.models.category import ArticleCategory, Category
+from app.models.issue import Issue
 from app.models.news import Article
 from app.models.notification import Subscription, UserNotification
 from app.models.user import User
@@ -136,4 +137,111 @@ def notify_subscribers(article_ids: list[uuid.UUID]) -> int:
                 )
 
     logger.info(f"[Notifier] 완료 — {notification_count}건 알림 생성")
+    return notification_count
+
+
+def _send_breaking_email(to_email: str, issue_title: str, issue_id: uuid.UUID,
+                         category_value: str) -> None:
+    if not _SMTP_USER or not _SMTP_PASS:
+        logger.warning("[Notifier] SMTP 자격증명 없음 — 속보 이메일 스킵")
+        return
+
+    issue_url = f"{_BASE_URL}/issues/{issue_id}"
+    body = (
+        f"구독하신 카테고리 '{category_value}'에서 여러 매체가 동시에 다루는 속보가 발생했습니다.\n\n"
+        f"제목: {issue_title}\n"
+        f"링크: {issue_url}\n\n"
+        f"NewsFlow에서 매체별 보도를 비교해보세요."
+    )
+
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = f"[NewsFlow 속보] {issue_title[:30]}"
+    msg["From"] = _SMTP_USER
+    msg["To"] = to_email
+
+    try:
+        with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as server:
+            server.starttls()
+            server.login(_SMTP_USER, _SMTP_PASS)
+            server.send_message(msg)
+    except Exception as e:
+        logger.warning(f"[Notifier] 속보 이메일 발송 실패: {to_email} — {e}")
+
+
+def notify_breaking_issues(hours: int = 2) -> int:
+    """
+    매체 2곳 이상이 다룬 속보 이슈 중 아직 알림을 보내지 않은 건에 대해
+    해당 카테고리를 구독 중인 사용자에게 user_notifications 레코드를 생성하고 이메일을 발송한다.
+
+    이슈당 breaking_notified_at을 한 번만 채워 재발송을 방지한다
+    (이후 매체가 더 늘어나도 추가 알림은 보내지 않는다 — 최초 속보 발생 시점 1회만 알림).
+
+    Returns:
+        생성된 알림 수
+    """
+    since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    notification_count = 0
+
+    with get_session() as session:
+        issues = session.execute(
+            select(Issue)
+            .where(
+                Issue.status == "active",
+                Issue.breaking_notified_at.is_(None),
+                Issue.source_count >= 2,
+                Issue.last_published_at >= since,
+                Issue.category_id.is_not(None),
+            )
+        ).scalars().all()
+
+        for issue in issues:
+            if issue.representative_article_id is None:
+                issue.breaking_notified_at = datetime.now(tz=timezone.utc)
+                continue
+
+            category = session.get(Category, issue.category_id)
+            if category is None:
+                issue.breaking_notified_at = datetime.now(tz=timezone.utc)
+                continue
+
+            subs = session.execute(
+                select(Subscription)
+                .where(
+                    Subscription.is_active == True,  # noqa: E712
+                    Subscription.subscription_type == "category",
+                    Subscription.value == category.slug,
+                )
+            ).scalars().all()
+
+            notified_users: set[uuid.UUID] = set()
+            for sub in subs:
+                if sub.user_id in notified_users:
+                    continue
+                notified_users.add(sub.user_id)
+
+                user = session.get(User, sub.user_id)
+                if user is None or not user.email:
+                    continue
+
+                notification = UserNotification(
+                    id=uuid.uuid4(),
+                    user_id=sub.user_id,
+                    article_id=issue.representative_article_id,
+                    subscription_id=sub.id,
+                    is_read=False,
+                    sent_at=datetime.now(tz=timezone.utc),
+                )
+                session.add(notification)
+                notification_count += 1
+
+                _send_breaking_email(
+                    to_email=user.email,
+                    issue_title=issue.title,
+                    issue_id=issue.id,
+                    category_value=category.slug,
+                )
+
+            issue.breaking_notified_at = datetime.now(tz=timezone.utc)
+
+    logger.info(f"[Notifier] 속보 알림 완료 — {notification_count}건")
     return notification_count
