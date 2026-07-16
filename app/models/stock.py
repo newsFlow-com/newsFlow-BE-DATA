@@ -55,11 +55,19 @@ class ArticleStock(UUIDMixin, Base):
     기사-종목 연결.
     mention_score: 기사에서 해당 종목이 얼마나 중요하게 언급됐는지 0-1 점수.
     linked_by: AI가 연결했는지, 규칙 기반인지 추적.
+
+    영향도 분석(pipelines/impact_analyzer.py)이 채우는 필드:
+      price_change_publish_day: 발행일 기준 가장 가까운 거래일의 주가 등락률(%)
+      price_change_3d: 발행일 종가 → 3거래일 후 종가까지의 누적 변동률(%)
+      impact_analyzed_at: price_change_3d 까지 계산 완료된 시각 (NULL이면 재처리 대상)
+
+    ⚠ 인과관계를 증명하는 지표가 아니라 "발행 시점 전후 주가 동조화" 참고 지표다.
     """
     __tablename__ = "article_stocks"
     __table_args__ = (
         Index("ix_as_article_stock", "article_id", "stock_id", unique=True),
         Index("ix_as_stock", "stock_id"),
+        Index("ix_as_impact_analyzed", "impact_analyzed_at"),
     )
 
     article_id: Mapped[uuid.UUID] = mapped_column(
@@ -76,6 +84,11 @@ class ArticleStock(UUIDMixin, Base):
     linked_by: Mapped[str] = mapped_column(
         String(20), nullable=False, default="rule",
         comment="ai | rule"
+    )
+    price_change_publish_day: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    price_change_3d: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    impact_analyzed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
