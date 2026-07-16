@@ -44,6 +44,10 @@ class Issue(UUIDMixin, Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="active", comment="active | archived"
     )
+    breaking_notified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="속보 알림 발송 완료 시각 (NULL이면 미발송, 재발송 방지용)"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
